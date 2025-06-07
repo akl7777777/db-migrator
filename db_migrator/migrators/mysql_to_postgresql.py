@@ -122,7 +122,16 @@ class MySQLToPostgreSQLMigrator:
         length_match = re.search(r'\(([^)]+)\)', mysql_type)
         length = length_match.group(1) if length_match else None
         
-        # 转换类型
+        # 特殊处理 tinyint 类型
+        if base_type == 'tinyint':
+            # tinyint(1) 通常用作布尔值
+            if length == '1':
+                return 'BOOLEAN'
+            else:
+                # 其他 tinyint 作为小整数
+                return 'SMALLINT'
+        
+        # 转换其他类型
         pg_type = self.type_mapping.get(base_type, 'TEXT')
         
         # 处理特殊情况
