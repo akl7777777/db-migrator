@@ -1177,11 +1177,57 @@ class MigratorGUI:
             else:
                 self.progress_bar['value'] = progress * 100
         
-        # 添加到日志
-        self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.configure(state=tk.DISABLED)
+        # 过滤和格式化日志消息
+        display_message = self._format_log_message(message, current, total)
+        
+        if display_message:  # 只显示非空消息
+            # 添加到日志
+            self.log_text.configure(state=tk.NORMAL)
+            self.log_text.insert(tk.END, display_message + "\n")
+            self.log_text.see(tk.END)
+            self.log_text.configure(state=tk.DISABLED)
+    
+    def _format_log_message(self, message: str, current: int = 0, total: int = 0):
+        """格式化日志消息，过滤重复和无用信息"""
+        # 跳过某些重复的消息
+        skip_patterns = [
+            r"^  已迁移: \w+$",  # 跳过旧式的简单进度消息
+            r"^  已迁移: channels$",  # 跳过重复的channels消息
+        ]
+        
+        for pattern in skip_patterns:
+            if re.match(pattern, message):
+                return None
+        
+        # 格式化时间戳
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        # 为不同类型的消息添加不同的格式
+        if message.startswith("开始迁移"):
+            return f"[{timestamp}] 🚀 {message}"
+        elif "处理表:" in message:
+            return f"[{timestamp}] 📋 {message}"
+        elif message.startswith("  ✓"):
+            return f"[{timestamp}] ✅ {message.strip()}"
+        elif message.startswith("  ✗"):
+            return f"[{timestamp}] ❌ {message.strip()}"
+        elif message.startswith("  ⏳"):
+            # 进度消息，添加进度条
+            if current > 0 and total > 0:
+                percent = (current / total) * 100
+                bar_length = 20
+                filled_length = int(bar_length * current // total)
+                bar = '█' * filled_length + '░' * (bar_length - filled_length)
+                return f"[{timestamp}] {message.strip()} [{bar}]"
+            else:
+                return f"[{timestamp}] {message.strip()}"
+        elif message.startswith("迁移完成"):
+            return f"[{timestamp}] 🎉 {message}"
+        elif "错误" in message or "失败" in message:
+            return f"[{timestamp}] ⚠️ {message}"
+        else:
+            return f"[{timestamp}] ℹ️ {message}"
     
     def on_table_click(self, event):
         """表点击事件处理 - 实现checkbox式选择"""

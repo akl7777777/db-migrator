@@ -241,7 +241,7 @@ class MySQLToPostgreSQLMigrator:
         try:
             # 获取总行数
             total_rows = self.mysql_connector.get_table_count(table_name)
-            self._report_progress(f"  总行数: {total_rows}")
+            self._report_progress(f"  总行数: {total_rows:,}")
             
             if total_rows == 0:
                 self._report_progress("  ✓ 无数据需要迁移")
@@ -254,6 +254,7 @@ class MySQLToPostgreSQLMigrator:
             # 批量迁移数据
             offset = 0
             migrated_rows = 0
+            batch_count = 0
             
             while offset < total_rows:
                 # 获取数据
@@ -272,15 +273,20 @@ class MySQLToPostgreSQLMigrator:
                 
                 migrated_rows += len(rows)
                 offset += batch_size
+                batch_count += 1
                 
-                # 报告进度
-                self._report_progress(
-                    f"  已迁移: {table_name}",
-                    migrated_rows,
-                    total_rows
-                )
+                # 计算进度百分比
+                progress_percent = min(100, (migrated_rows / total_rows) * 100)
+                
+                # 报告详细进度（每10批或最后一批报告一次）
+                if batch_count % 10 == 0 or migrated_rows >= total_rows:
+                    self._report_progress(
+                        f"  ⏳ {table_name}: {migrated_rows:,}/{total_rows:,} 行 ({progress_percent:.1f}%)",
+                        migrated_rows,
+                        total_rows
+                    )
             
-            self._report_progress(f"  ✓ 数据迁移完成: {table_name}")
+            self._report_progress(f"  ✓ 数据迁移完成: {table_name} ({migrated_rows:,} 行)")
             
             # 更新序列
             self.update_sequences(table_name)
