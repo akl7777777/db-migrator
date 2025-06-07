@@ -1,0 +1,56 @@
+# 选择性表迁移配置文件
+migration:
+  # 源数据库配置
+  source:
+    type: mysql
+    host: 127.0.0.1
+    port: 3306
+    username: root
+    password: 12345678
+    database: shellapiminipool
+    options:
+      charset: utf8mb4
+
+  # 目标数据库配置
+  target:
+    type: postgresql
+    host: 127.0.0.1
+    port: 5432
+    username: takedayuuichi
+    password: 12345678
+    database: shellapiminipool
+    options:
+      sslmode: disable
+
+  # 迁移选项
+  options:
+    # 要迁移的特定表（例子）
+    tables: 
+      - "user_table"
+      - "order_table" 
+      - "product_table"
+    
+    # 要排除的表（可选）
+    exclude_tables: 
+      - "log_table"
+      - "temp_table"
+    
+    # 批处理大小
+    batch_size: 1000
+    
+    # 并发数
+    workers: 4
+    
+    # 是否删除目标表
+    drop_target: true
+    
+    # 是否迁移索引
+    migrate_indexes: true
+    
+    # 是否迁移外键
+    migrate_foreign_keys: true
+
+  # 日志配置
+  logging:
+    level: INFO
+    file: migration.log 

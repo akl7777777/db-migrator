@@ -10,6 +10,8 @@ import json
 import os
 from typing import Dict, Any, Optional
 import logging
+import tkinter.ttk as ttk
+import re
 
 try:
     import customtkinter as ctk
@@ -266,7 +268,7 @@ class MigratorGUI:
             load_btn.pack(side="left", padx=5)
     
     def create_migration_tab(self):
-        """创建迁移选项卡"""
+        """创建迁移设置选项卡"""
         if self.use_custom_tk:
             migration_frame = self.notebook.add("迁移设置")
         else:
@@ -279,82 +281,137 @@ class MigratorGUI:
         # 迁移选项
         if self.use_custom_tk:
             options_frame = ctk.CTkFrame(migration_frame)
+            options_frame.pack(fill="x", padx=10, pady=10)
+            
+            ctk.CTkLabel(options_frame, text="批处理大小:").pack(side="left", padx=(10, 5))
+            self.batch_size_var = tk.StringVar(value="1000")
+            batch_entry = ctk.CTkEntry(options_frame, textvariable=self.batch_size_var, width=80)
+            batch_entry.pack(side="left", padx=5)
         else:
             options_frame = ttk.LabelFrame(migration_frame, text="迁移选项", padding=10)
-        options_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        
-        # 批处理大小
-        if self.use_custom_tk:
-            batch_label = ctk.CTkLabel(options_frame, text="批处理大小:")
-            batch_label.pack(anchor="w", padx=10, pady=(10, 0))
+            options_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
             
-            self.batch_size_var = tk.StringVar(value='1000')
-            batch_entry = ctk.CTkEntry(options_frame, textvariable=self.batch_size_var)
-            batch_entry.pack(fill="x", padx=10, pady=(0, 10))
-        else:
-            batch_frame = ttk.Frame(options_frame)
-            batch_frame.pack(fill="x", pady=5)
-            ttk.Label(batch_frame, text="批处理大小:").pack(side="left")
-            self.batch_size_var = tk.StringVar(value='1000')
-            ttk.Entry(batch_frame, textvariable=self.batch_size_var, width=10).pack(side="right")
-        
-        # 选项复选框
-        self.include_indexes_var = tk.BooleanVar(value=True)
-        self.drop_existing_var = tk.BooleanVar(value=True)
-        
-        if self.use_custom_tk:
-            ctk.CTkCheckBox(options_frame, text="包含索引迁移", variable=self.include_indexes_var).pack(anchor="w", padx=10, pady=5)
-            ctk.CTkCheckBox(options_frame, text="删除现有表", variable=self.drop_existing_var).pack(anchor="w", padx=10, pady=(0, 10))
-        else:
-            ttk.Checkbutton(options_frame, text="包含索引迁移", variable=self.include_indexes_var).pack(anchor="w", pady=2)
+            ttk.Label(options_frame, text="批处理大小:").pack(side="left")
+            self.batch_size_var = tk.StringVar(value="1000")
+            ttk.Entry(options_frame, textvariable=self.batch_size_var, width=10).pack(side="left", padx=(5, 10))
+            
+            self.include_indexes_var = tk.BooleanVar(value=True)
+            ttk.Checkbutton(options_frame, text="包含索引", variable=self.include_indexes_var).pack(anchor="w", pady=2)
+            
+            self.drop_existing_var = tk.BooleanVar()
             ttk.Checkbutton(options_frame, text="删除现有表", variable=self.drop_existing_var).pack(anchor="w", pady=2)
         
-        # 表选择框架
+        # 改进的表选择框架
         if self.use_custom_tk:
             table_frame = ctk.CTkFrame(migration_frame)
         else:
-            table_frame = ttk.LabelFrame(migration_frame, text="表选择", padding=10)
+            table_frame = ttk.LabelFrame(migration_frame, text="表选择与管理", padding=10)
         table_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-        table_frame.grid_rowconfigure(1, weight=1)
+        table_frame.grid_rowconfigure(2, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
         
-        # 表选择按钮
+        # 第一行：表操作按钮
         if self.use_custom_tk:
-            table_btn_frame = ctk.CTkFrame(table_frame)
-            table_btn_frame.pack(fill="x", pady=(10, 10))
-            
-            refresh_btn = ctk.CTkButton(table_btn_frame, text="刷新表列表", command=self.refresh_tables)
+            btn_frame1 = ctk.CTkFrame(table_frame)
+            btn_frame1.pack(fill="x", pady=(10, 5))
+        else:
+            btn_frame1 = ttk.Frame(table_frame)
+            btn_frame1.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        
+        # 基本操作按钮
+        if self.use_custom_tk:
+            refresh_btn = ctk.CTkButton(btn_frame1, text="🔄 刷新表列表", command=self.refresh_tables, width=100)
             refresh_btn.pack(side="left", padx=(10, 5))
-            
-            select_all_btn = ctk.CTkButton(table_btn_frame, text="全选", command=self.select_all_tables)
+            select_all_btn = ctk.CTkButton(btn_frame1, text="✅ 全选", command=self.select_all_tables, width=80)
             select_all_btn.pack(side="left", padx=5)
-            
-            deselect_all_btn = ctk.CTkButton(table_btn_frame, text="全不选", command=self.deselect_all_tables)
+            deselect_all_btn = ctk.CTkButton(btn_frame1, text="❌ 全不选", command=self.deselect_all_tables, width=80)
             deselect_all_btn.pack(side="left", padx=5)
         else:
-            table_btn_frame = ttk.Frame(table_frame)
-            table_btn_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-            
-            ttk.Button(table_btn_frame, text="刷新表列表", command=self.refresh_tables).pack(side="left", padx=(0, 5))
-            ttk.Button(table_btn_frame, text="全选", command=self.select_all_tables).pack(side="left", padx=5)
-            ttk.Button(table_btn_frame, text="全不选", command=self.deselect_all_tables).pack(side="left", padx=5)
+            ttk.Button(btn_frame1, text="🔄 刷新表列表", command=self.refresh_tables).pack(side="left", padx=(0, 5))
+            ttk.Button(btn_frame1, text="✅ 全选", command=self.select_all_tables).pack(side="left", padx=5)
+            ttk.Button(btn_frame1, text="❌ 全不选", command=self.deselect_all_tables).pack(side="left", padx=5)
+            ttk.Button(btn_frame1, text="🔍 按模式选择", command=self.pattern_select_dialog).pack(side="left", padx=5)
+            ttk.Button(btn_frame1, text="📊 表统计", command=self.show_table_stats).pack(side="left", padx=5)
         
-        # 表列表
+        # 第二行：搜索和过滤
         if self.use_custom_tk:
+            search_frame = ctk.CTkFrame(table_frame)
+            search_frame.pack(fill="x", pady=5)
+        else:
+            search_frame = ttk.Frame(table_frame)
+            search_frame.grid(row=1, column=0, sticky="ew", pady=5)
+        
+        if self.use_custom_tk:
+            ctk.CTkLabel(search_frame, text="🔍 搜索表:").pack(side="left", padx=(10, 5))
+            self.search_var = tk.StringVar()
+            search_entry = ctk.CTkEntry(search_frame, textvariable=self.search_var, width=200)
+            search_entry.pack(side="left", padx=5)
+            search_entry.bind('<KeyRelease>', self.filter_tables)
+        else:
+            ttk.Label(search_frame, text="🔍 搜索表:").pack(side="left", padx=(0, 5))
+            self.search_var = tk.StringVar()
+            search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=25)
+            search_entry.pack(side="left", padx=5)
+            search_entry.bind('<KeyRelease>', self.filter_tables)
+            
+            ttk.Label(search_frame, text="显示:").pack(side="left", padx=(20, 5))
+            self.show_filter_var = tk.StringVar(value="all")
+            show_combo = ttk.Combobox(search_frame, textvariable=self.show_filter_var, 
+                                    values=["all", "selected", "unselected"], width=10, state="readonly")
+            show_combo.pack(side="left", padx=5)
+            show_combo.bind('<<ComboboxSelected>>', self.filter_tables)
+        
+        # 第三行：表列表（使用Treeview显示更多信息）
+        if self.use_custom_tk:
+            # 简化版本，继续使用Listbox
             self.table_listbox = tk.Listbox(table_frame, selectmode=tk.MULTIPLE)
-            self.table_listbox.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+            self.table_listbox.pack(fill="both", expand=True, padx=10, pady=(5, 10))
         else:
             list_frame = ttk.Frame(table_frame)
-            list_frame.grid(row=1, column=0, sticky="nsew")
+            list_frame.grid(row=2, column=0, sticky="nsew", pady=(5, 0))
             list_frame.grid_rowconfigure(0, weight=1)
             list_frame.grid_columnconfigure(0, weight=1)
             
-            self.table_listbox = tk.Listbox(list_frame, selectmode=tk.MULTIPLE)
-            scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.table_listbox.yview)
-            self.table_listbox.configure(yscrollcommand=scrollbar.set)
+            # 使用Treeview替代Listbox以显示更多信息
+            columns = ('table', 'rows', 'size', 'columns')
+            self.table_tree = ttk.Treeview(list_frame, columns=columns, show='tree headings', selectmode='extended')
             
-            self.table_listbox.grid(row=0, column=0, sticky="nsew")
-            scrollbar.grid(row=0, column=1, sticky="ns")
+            # 设置列标题和宽度
+            self.table_tree.heading('#0', text='选择', anchor='w')
+            self.table_tree.heading('table', text='表名', anchor='w')
+            self.table_tree.heading('rows', text='行数', anchor='e')
+            self.table_tree.heading('size', text='大小', anchor='e')
+            self.table_tree.heading('columns', text='列数', anchor='e')
+            
+            self.table_tree.column('#0', width=60, minwidth=50)
+            self.table_tree.column('table', width=200, minwidth=150)
+            self.table_tree.column('rows', width=100, minwidth=80)
+            self.table_tree.column('size', width=100, minwidth=80)
+            self.table_tree.column('columns', width=80, minwidth=60)
+            
+            # 添加滚动条
+            tree_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.table_tree.yview)
+            self.table_tree.configure(yscrollcommand=tree_scroll.set)
+            
+            self.table_tree.grid(row=0, column=0, sticky="nsew")
+            tree_scroll.grid(row=0, column=1, sticky="ns")
+            
+            # 绑定双击事件显示表详情
+            self.table_tree.bind('<Double-1>', self.show_table_details)
+            
+            # 绑定选择变化事件
+            self.table_tree.bind('<<TreeviewSelect>>', self.on_table_selection_change)
+            
+            # 存储所有表数据
+            self.all_tables_data = []
+        
+        # 第四行：选择状态显示
+        if not self.use_custom_tk:
+            status_frame = ttk.Frame(table_frame)
+            status_frame.grid(row=3, column=0, sticky="ew", pady=(5, 0))
+            
+            self.table_status_label = ttk.Label(status_frame, text="📋 表: 0 | 选中: 0 | 总行数: 0")
+            self.table_status_label.pack(side="left")
     
     def create_log_tab(self):
         """创建日志选项卡"""
@@ -479,60 +536,406 @@ class MigratorGUI:
             messagebox.showerror("连接测试", f"测试连接时发生错误:\n{str(e)}")
     
     def refresh_tables(self):
-        """刷新表列表"""
+        """刷新表列表（增强版）"""
         try:
             mysql_config = self.get_mysql_config()
             from ..connectors.mysql_connector import MySQLConnector
             
             connector = MySQLConnector(mysql_config)
             if connector.connect():
+                # 获取表列表
                 tables = connector.get_tables()
+                
+                # 获取每个表的详细信息
+                self.all_tables_data = []
+                total_rows = 0
+                
+                self.update_progress("正在获取表信息...", 0, len(tables))
+                
+                for i, table_name in enumerate(tables):
+                    try:
+                        # 获取表行数
+                        rows = connector.get_table_count(table_name)
+                        
+                        # 获取表结构（列数）
+                        structure = connector.get_table_structure(table_name)
+                        columns = len(structure) if structure else 0
+                        
+                        # 估算表大小（简化）
+                        size_mb = rows * columns * 0.001  # 粗略估算
+                        if size_mb < 1:
+                            size_str = f"{size_mb*1000:.0f}KB"
+                        elif size_mb < 1024:
+                            size_str = f"{size_mb:.1f}MB"
+                        else:
+                            size_str = f"{size_mb/1024:.1f}GB"
+                        
+                        table_info = {
+                            'name': table_name,
+                            'rows': rows,
+                            'columns': columns,
+                            'size': size_str,
+                            'size_mb': size_mb
+                        }
+                        
+                        self.all_tables_data.append(table_info)
+                        total_rows += rows
+                        
+                        # 更新进度
+                        self.update_progress(f"获取表信息: {table_name}", i+1, len(tables))
+                        
+                    except Exception as e:
+                        print(f"获取表 {table_name} 信息时出错: {e}")
+                        # 添加基本信息
+                        self.all_tables_data.append({
+                            'name': table_name,
+                            'rows': 0,
+                            'columns': 0,
+                            'size': '未知',
+                            'size_mb': 0
+                        })
+                
                 connector.disconnect()
                 
-                self.table_listbox.delete(0, tk.END)
-                for table in tables:
-                    self.table_listbox.insert(tk.END, table)
+                # 更新GUI显示
+                self.populate_table_list()
+                self.update_table_status()
                 
-                messagebox.showinfo("刷新完成", f"找到 {len(tables)} 个表")
+                messagebox.showinfo("刷新完成", 
+                    f"找到 {len(tables)} 个表\n"
+                    f"总行数: {total_rows:,}\n"
+                    f"数据获取完成")
+                
             else:
                 messagebox.showerror("错误", "无法连接到MySQL数据库")
         
         except Exception as e:
             messagebox.showerror("错误", f"刷新表列表时发生错误:\n{str(e)}")
-    
-    def select_all_tables(self):
-        """全选表"""
-        self.table_listbox.select_set(0, tk.END)
-    
-    def deselect_all_tables(self):
-        """全不选表"""
-        self.table_listbox.selection_clear(0, tk.END)
-    
+        finally:
+            self.update_progress("准备就绪")
+
+    def populate_table_list(self):
+        """填充表列表显示"""
+        if self.use_custom_tk:
+            # 简化版本：使用Listbox
+            self.table_listbox.delete(0, tk.END)
+            for table_info in self.all_tables_data:
+                display_text = f"{table_info['name']} ({table_info['rows']:,} 行)"
+                self.table_listbox.insert(tk.END, display_text)
+        else:
+            # 增强版本：使用Treeview
+            # 清空现有项目
+            for item in self.table_tree.get_children():
+                self.table_tree.delete(item)
+            
+            # 添加表数据
+            for table_info in self.all_tables_data:
+                self.table_tree.insert('', 'end', text='☐',
+                    values=(table_info['name'], 
+                           f"{table_info['rows']:,}",
+                           table_info['size'],
+                           table_info['columns']))
+
+    def filter_tables(self, event=None):
+        """过滤表列表"""
+        if self.use_custom_tk:
+            return  # 简化版本不支持过滤
+        
+        search_text = self.search_var.get().lower()
+        show_filter = self.show_filter_var.get()
+        
+        # 清空现有显示
+        for item in self.table_tree.get_children():
+            self.table_tree.delete(item)
+        
+        # 获取选中的表
+        selected_tables = self.get_selected_tables()
+        
+        # 过滤并显示表
+        for table_info in self.all_tables_data:
+            table_name = table_info['name']
+            is_selected = table_name in selected_tables
+            
+            # 应用搜索过滤
+            if search_text and search_text not in table_name.lower():
+                continue
+            
+            # 应用选择状态过滤
+            if show_filter == "selected" and not is_selected:
+                continue
+            elif show_filter == "unselected" and is_selected:
+                continue
+            
+            # 设置选择标记
+            check_mark = '☑' if is_selected else '☐'
+            
+            item_id = self.table_tree.insert('', 'end', text=check_mark,
+                values=(table_name, 
+                       f"{table_info['rows']:,}",
+                       table_info['size'],
+                       table_info['columns']))
+            
+            # 如果是选中的表，添加选择
+            if is_selected:
+                self.table_tree.selection_add(item_id)
+
     def get_selected_tables(self):
         """获取选中的表"""
-        selection = self.table_listbox.curselection()
-        return [self.table_listbox.get(i) for i in selection]
-    
-    def progress_callback(self, message: str, current: int = 0, total: int = 0):
-        """进度回调函数"""
-        self.root.after(0, self.update_progress, message, current, total)
-    
-    def update_progress(self, message: str, current: int = 0, total: int = 0):
-        """更新进度显示"""
-        self.progress_label.configure(text=message)
+        if self.use_custom_tk:
+            selection = self.table_listbox.curselection()
+            selected_tables = []
+            for i in selection:
+                # 从显示文本中提取表名
+                display_text = self.table_listbox.get(i)
+                table_name = display_text.split(' (')[0]  # 提取表名部分
+                selected_tables.append(table_name)
+            return selected_tables
+        else:
+            selection = self.table_tree.selection()
+            selected_tables = []
+            for item_id in selection:
+                table_name = self.table_tree.item(item_id)['values'][0]
+                selected_tables.append(table_name)
+            return selected_tables
+
+    def select_all_tables(self):
+        """全选表"""
+        if self.use_custom_tk:
+            self.table_listbox.select_set(0, tk.END)
+        else:
+            for item in self.table_tree.get_children():
+                self.table_tree.selection_add(item)
+            self.update_table_status()
+
+    def deselect_all_tables(self):
+        """全不选表"""
+        if self.use_custom_tk:
+            self.table_listbox.selection_clear(0, tk.END)
+        else:
+            self.table_tree.selection_remove(self.table_tree.get_children())
+            self.update_table_status()
+
+    def update_table_status(self):
+        """更新表选择状态显示"""
+        if self.use_custom_tk:
+            return
         
-        if total > 0:
-            progress = current / total
-            if self.use_custom_tk:
-                self.progress_bar.set(progress)
+        total_tables = len(self.all_tables_data)
+        selected_tables = self.get_selected_tables()
+        selected_count = len(selected_tables)
+        
+        # 计算选中表的总行数
+        total_rows = 0
+        for table_info in self.all_tables_data:
+            if table_info['name'] in selected_tables:
+                total_rows += table_info['rows']
+        
+        status_text = f"📋 表: {total_tables} | 选中: {selected_count} | 选中表行数: {total_rows:,}"
+        self.table_status_label.configure(text=status_text)
+
+    def pattern_select_dialog(self):
+        """按模式选择表对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("按模式选择表")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        
+        # 使对话框居中
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 模式输入
+        pattern_frame = ttk.Frame(dialog)
+        pattern_frame.pack(fill="x", padx=10, pady=10)
+        
+        ttk.Label(pattern_frame, text="选择模式 (支持通配符 * 和 ?):").pack(anchor="w")
+        pattern_var = tk.StringVar()
+        pattern_entry = ttk.Entry(pattern_frame, textvariable=pattern_var, width=40)
+        pattern_entry.pack(fill="x", pady=(5, 0))
+        pattern_entry.focus()
+        
+        # 示例
+        ttk.Label(pattern_frame, text="示例: user_*, order_*, *_log", foreground="gray").pack(anchor="w", pady=(2, 0))
+        
+        # 匹配预览
+        preview_frame = ttk.LabelFrame(dialog, text="匹配预览")
+        preview_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        preview_listbox = tk.Listbox(preview_frame)
+        preview_scroll = ttk.Scrollbar(preview_frame, orient="vertical", command=preview_listbox.yview)
+        preview_listbox.configure(yscrollcommand=preview_scroll.set)
+        
+        preview_listbox.pack(side="left", fill="both", expand=True)
+        preview_scroll.pack(side="right", fill="y")
+        
+        def update_preview(*args):
+            pattern = pattern_var.get()
+            preview_listbox.delete(0, tk.END)
+            
+            if pattern:
+                import fnmatch
+                matched_tables = []
+                for table_info in self.all_tables_data:
+                    if fnmatch.fnmatch(table_info['name'], pattern):
+                        matched_tables.append(table_info['name'])
+                        preview_listbox.insert(tk.END, table_info['name'])
+                
+                if matched_tables:
+                    preview_listbox.insert(0, f"--- 匹配到 {len(matched_tables)} 个表 ---")
+        
+        pattern_var.trace('w', update_preview)
+        
+        # 按钮
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill="x", padx=10, pady=10)
+        
+        def apply_pattern():
+            pattern = pattern_var.get()
+            if pattern:
+                import fnmatch
+                # 先清空选择
+                self.deselect_all_tables()
+                
+                # 选择匹配的表
+                if not self.use_custom_tk:
+                    for item in self.table_tree.get_children():
+                        table_name = self.table_tree.item(item)['values'][0]
+                        if fnmatch.fnmatch(table_name, pattern):
+                            self.table_tree.selection_add(item)
+                
+                self.update_table_status()
+                dialog.destroy()
+        
+        ttk.Button(button_frame, text="应用", command=apply_pattern).pack(side="right", padx=(5, 0))
+        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side="right")
+
+    def show_table_stats(self):
+        """显示表统计信息"""
+        if not self.all_tables_data:
+            messagebox.showwarning("提示", "请先刷新表列表")
+            return
+        
+        # 计算统计信息
+        total_tables = len(self.all_tables_data)
+        total_rows = sum(table['rows'] for table in self.all_tables_data)
+        total_size_mb = sum(table['size_mb'] for table in self.all_tables_data)
+        
+        # 找出最大的表
+        largest_table = max(self.all_tables_data, key=lambda x: x['rows']) if self.all_tables_data else None
+        
+        # 统计空表
+        empty_tables = [table for table in self.all_tables_data if table['rows'] == 0]
+        
+        message = f"📊 数据库统计信息\n\n"
+        message += f"总表数: {total_tables}\n"
+        message += f"总行数: {total_rows:,}\n"
+        message += f"估算大小: {total_size_mb:.1f} MB\n\n"
+        
+        if largest_table:
+            message += f"最大表: {largest_table['name']}\n"
+            message += f"  行数: {largest_table['rows']:,}\n"
+            message += f"  列数: {largest_table['columns']}\n\n"
+        
+        if empty_tables:
+            message += f"空表数量: {len(empty_tables)}\n"
+            if len(empty_tables) <= 5:
+                message += f"空表: {', '.join([t['name'] for t in empty_tables])}\n"
             else:
-                self.progress_bar['value'] = progress * 100
+                message += f"空表: {', '.join([t['name'] for t in empty_tables[:5]])} 等\n"
         
-        # 添加到日志
-        self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.configure(state=tk.DISABLED)
+        messagebox.showinfo("表统计信息", message)
+
+    def show_table_details(self, event):
+        """显示表详细信息（双击事件）"""
+        if self.use_custom_tk:
+            return
+        
+        selection = self.table_tree.selection()
+        if not selection:
+            return
+        
+        item = selection[0]
+        table_name = self.table_tree.item(item)['values'][0]
+        
+        # 找到表信息
+        table_info = None
+        for info in self.all_tables_data:
+            if info['name'] == table_name:
+                table_info = info
+                break
+        
+        if not table_info:
+            return
+        
+        # 显示详细信息对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"表详情: {table_name}")
+        dialog.geometry("500x400")
+        dialog.resizable(True, True)
+        
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 基本信息
+        info_frame = ttk.LabelFrame(dialog, text="基本信息")
+        info_frame.pack(fill="x", padx=10, pady=10)
+        
+        ttk.Label(info_frame, text=f"表名: {table_info['name']}").pack(anchor="w", padx=10, pady=2)
+        ttk.Label(info_frame, text=f"行数: {table_info['rows']:,}").pack(anchor="w", padx=10, pady=2)
+        ttk.Label(info_frame, text=f"列数: {table_info['columns']}").pack(anchor="w", padx=10, pady=2)
+        ttk.Label(info_frame, text=f"估算大小: {table_info['size']}").pack(anchor="w", padx=10, pady=2)
+        
+        # 表结构信息
+        structure_frame = ttk.LabelFrame(dialog, text="表结构")
+        structure_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # 获取表结构
+        try:
+            mysql_config = self.get_mysql_config()
+            from ..connectors.mysql_connector import MySQLConnector
+            
+            connector = MySQLConnector(mysql_config)
+            if connector.connect():
+                structure = connector.get_table_structure(table_name)
+                connector.disconnect()
+                
+                if structure:
+                    # 创建表格显示结构
+                    columns = ('field', 'type', 'null', 'key', 'default')
+                    tree = ttk.Treeview(structure_frame, columns=columns, show='headings')
+                    
+                    tree.heading('field', text='字段名')
+                    tree.heading('type', text='类型')
+                    tree.heading('null', text='允许NULL')
+                    tree.heading('key', text='键')
+                    tree.heading('default', text='默认值')
+                    
+                    tree.column('field', width=120)
+                    tree.column('type', width=100)
+                    tree.column('null', width=80)
+                    tree.column('key', width=60)
+                    tree.column('default', width=100)
+                    
+                    for field_info in structure:
+                        tree.insert('', 'end', values=(
+                            field_info.get('Field', ''),
+                            field_info.get('Type', ''),
+                            field_info.get('Null', ''),
+                            field_info.get('Key', ''),
+                            field_info.get('Default', '')
+                        ))
+                    
+                    tree.pack(fill="both", expand=True, padx=5, pady=5)
+                else:
+                    ttk.Label(structure_frame, text="无法获取表结构").pack(padx=10, pady=10)
+            else:
+                ttk.Label(structure_frame, text="无法连接到数据库").pack(padx=10, pady=10)
+        
+        except Exception as e:
+            ttk.Label(structure_frame, text=f"获取表结构时出错: {str(e)}").pack(padx=10, pady=10)
+        
+        # 关闭按钮
+        ttk.Button(dialog, text="关闭", command=dialog.destroy).pack(pady=10)
     
     def start_migration(self):
         """开始迁移"""
@@ -752,6 +1155,47 @@ class MigratorGUI:
             except Exception:
                 pass  # 忽略加载错误
     
+    def progress_callback(self, message: str, current: int = 0, total: int = 0):
+        """进度回调函数"""
+        self.root.after(0, self.update_progress, message, current, total)
+    
+    def update_progress(self, message: str, current: int = 0, total: int = 0):
+        """更新进度显示"""
+        self.progress_label.configure(text=message)
+        
+        if total > 0:
+            progress = current / total
+            if self.use_custom_tk:
+                self.progress_bar.set(progress)
+            else:
+                self.progress_bar['value'] = progress * 100
+        
+        # 添加到日志
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.insert(tk.END, message + "\n")
+        self.log_text.see(tk.END)
+        self.log_text.configure(state=tk.DISABLED)
+    
+    def on_table_selection_change(self, event=None):
+        """表选择变化时的回调"""
+        if not self.use_custom_tk:
+            self.update_table_status()
+            # 更新选择标记
+            self.update_selection_marks()
+
+    def update_selection_marks(self):
+        """更新表列表中的选择标记"""
+        if self.use_custom_tk:
+            return
+        
+        selected_tables = self.get_selected_tables()
+        
+        # 更新所有项目的选择标记
+        for item in self.table_tree.get_children():
+            table_name = self.table_tree.item(item)['values'][0]
+            check_mark = '☑' if table_name in selected_tables else '☐'
+            self.table_tree.item(item, text=check_mark)
+
     def run(self):
         """运行GUI"""
         # 保存配置到默认位置（退出时）
