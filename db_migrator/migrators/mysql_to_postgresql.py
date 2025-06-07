@@ -260,6 +260,20 @@ class MySQLToPostgreSQLMigrator:
             columns = self.mysql_connector.get_table_structure(table_name)
             column_names = [col['Field'] for col in columns]
             
+            # 创建列类型映射，用于数据转换
+            column_type_map = {}
+            boolean_columns = set()
+            for col in columns:
+                original_type = col['Type']
+                converted_type = self.convert_column_type(original_type)
+                column_type_map[col['Field']] = {
+                    'original': original_type,
+                    'converted': converted_type
+                }
+                # 记录需要转换为布尔值的列
+                if converted_type == 'BOOLEAN':
+                    boolean_columns.add(col['Field'])
+            
             # 批量迁移数据
             offset = 0
             migrated_rows = 0
@@ -274,8 +288,25 @@ class MySQLToPostgreSQLMigrator:
                 if not rows:
                     break
                 
-                # 插入数据到PostgreSQL
-                success = self.pg_connector.insert_data(table_name, column_names, rows)
+                # 转换数据类型
+                converted_rows = []
+                for row in rows:
+                    converted_row = []
+                    for i, value in enumerate(row):
+                        col_name = column_names[i]
+                        
+                        # 如果是需要转换为布尔值的列
+                        if col_name in boolean_columns and value is not None:
+                            # 将 0/1 转换为 False/True
+                            converted_value = bool(value)
+                        else:
+                            converted_value = value
+                        
+                        converted_row.append(converted_value)
+                    converted_rows.append(tuple(converted_row))
+                
+                # 插入转换后的数据到PostgreSQL
+                success = self.pg_connector.insert_data(table_name, column_names, converted_rows)
                 if not success:
                     logging.error(f"插入数据失败: {table_name}")
                     return False
