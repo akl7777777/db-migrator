@@ -29,14 +29,15 @@ class MySQLConnector(BaseConnector):
         if 'auth_plugin' in options:
             self.connection_params['auth_plugin'] = options['auth_plugin']
 
-    def connect(self) -> None:
+    def connect(self) -> bool:
         """建立数据库连接"""
         try:
             self.connection = mysql.connector.connect(**self.connection_params)
             self.logger.info(f"Connected to MySQL database: {self.config.get('database')}")
+            return True
         except Error as e:
             self.logger.error(f"Failed to connect to MySQL: {e}")
-            raise
+            return False
 
     def disconnect(self) -> None:
         """断开数据库连接"""
@@ -481,3 +482,70 @@ class MySQLConnector(BaseConnector):
                 'longblob': 'bytea',
             }
         }
+
+    def get_table_count(self, table_name: str, where_clause: str = "") -> int:
+        """获取表的行数"""
+        cursor = self.connection.cursor()
+        try:
+            query = f"SELECT COUNT(*) FROM `{table_name}`"
+            if where_clause:
+                query += f" WHERE {where_clause}"
+            cursor.execute(query)
+            return cursor.fetchone()[0]
+        finally:
+            cursor.close()
+
+    def get_table_structure(self, table_name: str) -> List[Dict[str, Any]]:
+        """获取表结构信息"""
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(f"DESCRIBE `{table_name}`")
+            columns = []
+            for row in cursor.fetchall():
+                columns.append({
+                    'Field': row[0],
+                    'Type': row[1],
+                    'Null': row[2],
+                    'Key': row[3],
+                    'Default': row[4],
+                    'Extra': row[5]
+                })
+            return columns
+        finally:
+            cursor.close()
+
+    def get_table_data(self, table_name: str, batch_size: int = 1000, offset: int = 0, where_clause: str = "") -> List[Tuple]:
+        """获取表数据"""
+        cursor = self.connection.cursor()
+        try:
+            query = f"SELECT * FROM `{table_name}`"
+            if where_clause:
+                query += f" WHERE {where_clause}"
+            query += f" LIMIT {batch_size} OFFSET {offset}"
+            cursor.execute(query)
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+
+    def insert_data(self, table_name: str, columns: List[str], data: List[Tuple]) -> bool:
+        """插入数据到表中"""
+        if not data:
+            return True
+        
+        cursor = self.connection.cursor()
+        try:
+            # 构建插入语句
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join([f'`{col}`' for col in columns])
+            query = f"INSERT INTO `{table_name}` ({column_names}) VALUES ({placeholders})"
+            
+            # 批量插入
+            cursor.executemany(query, data)
+            self.connection.commit()
+            return True
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"插入数据失败: {e}")
+            return False
+        finally:
+            cursor.close()
