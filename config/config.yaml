@@ -1,0 +1,83 @@
+# 数据库迁移配置文件示例
+migration:
+  # 源数据库配置
+  source:
+    type: mysql  # mysql, postgresql, oracle, sqlserver, sqlite, mongodb
+    host: 127.0.0.1
+    port: 3306
+    username: root
+    password: password
+    database: source_db
+    options:
+      charset: utf8mb4
+      auth_plugin: caching_sha2_password
+
+  # 目标数据库配置
+  target:
+    type: postgresql
+    host: 127.0.0.1
+    port: 5432
+    username: postgres
+    password: password
+    database: target_db
+    options:
+      sslmode: disable
+
+  # 迁移选项
+  options:
+    # 要迁移的表（留空表示所有表）
+    tables:
+      - users
+      - orders
+      - products
+
+    # 要排除的表
+    exclude_tables:
+      - temp_table
+      - log_table
+
+    # 批处理大小
+    batch_size: 1000
+
+    # 并发数
+    workers: 4
+
+    # 是否删除目标表
+    drop_target: true
+
+    # 是否迁移索引
+    migrate_indexes: true
+
+    # 是否迁移外键
+    migrate_foreign_keys: true
+
+    # 是否迁移触发器
+    migrate_triggers: false
+
+    # 是否迁移存储过程
+    migrate_procedures: false
+
+    # 数据过滤条件
+    where_clauses:
+      users: "created_at > '2023-01-01'"
+      orders: "status != 'cancelled'"
+
+  # 类型映射覆盖
+  type_mappings:
+    # MySQL to PostgreSQL
+    mysql_to_postgresql:
+      tinyint: smallint
+      datetime: timestamp
+      enum: varchar(255)
+
+    # PostgreSQL to MySQL
+    postgresql_to_mysql:
+      serial: int auto_increment
+      text: longtext
+      json: json
+
+  # 日志配置
+  logging:
+    level: INFO  # DEBUG, INFO, WARNING, ERROR
+    file: migration.log
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
