@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional
 import logging
 import tkinter.ttk as ttk
 import re
+import time
 
 try:
     import customtkinter as ctk
@@ -53,7 +54,7 @@ class MigratorGUI:
         
         # 表选择状态管理
         self.all_tables_data = []
-        self.selected_table_names = set()
+        self.selected_table_names = set()  # 独立维护选择状态
         
         # 创建界面
         self.create_widgets()
@@ -361,7 +362,7 @@ class MigratorGUI:
             ttk.Label(search_frame, text="显示:").pack(side="left", padx=(20, 5))
             self.show_filter_var = tk.StringVar(value="all")
             show_combo = ttk.Combobox(search_frame, textvariable=self.show_filter_var, 
-                                    values=["all", "selected", "unselected"], width=10, state="readonly")
+                                    values=["all", "selected", "unselected", "large", "small", "empty"], width=10, state="readonly")
             show_combo.pack(side="left", padx=5)
             show_combo.bind('<<ComboboxSelected>>', self.filter_tables)
         
@@ -403,15 +404,11 @@ class MigratorGUI:
             # 绑定双击事件显示表详情
             self.table_tree.bind('<Double-1>', self.show_table_details)
             
-            # 绑定选择变化事件
-            self.table_tree.bind('<<TreeviewSelect>>', self.on_table_selection_change)
-            
-            # 添加单击切换选择状态的功能
+            # 添加单击事件处理checkbox式选择
             self.table_tree.bind('<Button-1>', self.on_table_click)
             
-            # 存储所有表数据和选择状态
+            # 存储所有表数据
             self.all_tables_data = []
-            self.selected_table_names = set()  # 用于跟踪选中的表名
         
         # 第四行：选择状态显示
         if not self.use_custom_tk:
@@ -647,7 +644,7 @@ class MigratorGUI:
     def filter_tables(self, event=None):
         """过滤表列表"""
         if self.use_custom_tk:
-            return  # 简化版本不支持过滤
+            return
         
         search_text = self.search_var.get().lower()
         show_filter = self.show_filter_var.get()
@@ -665,40 +662,40 @@ class MigratorGUI:
             if search_text and search_text not in table_name.lower():
                 continue
             
-            # 应用选择状态过滤
+            # 应用显示过滤
             if show_filter == "selected" and not is_selected:
                 continue
             elif show_filter == "unselected" and is_selected:
                 continue
+            elif show_filter == "large" and table_info['rows'] < 10000:
+                continue
+            elif show_filter == "small" and table_info['rows'] >= 10000:
+                continue
+            elif show_filter == "empty" and table_info['rows'] > 0:
+                continue
             
-            # 设置选择标记
-            check_mark = '☑' if is_selected else '☐'
-            
-            item_id = self.table_tree.insert('', 'end', text=check_mark,
-                values=(table_name, 
-                       f"{table_info['rows']:,}",
-                       table_info['size'],
-                       table_info['columns']))
-            
-            # 如果是选中的表，添加到Treeview选择中
-            if is_selected:
-                self.table_tree.selection_add(item_id)
+            # 添加表项
+            item_id = self.table_tree.insert('', 'end', text='☐',
+                   values=(table_info['name'], 
+                          f"{table_info['rows']:,}",
+                          table_info['size'],
+                          table_info['columns']))
         
+        self.update_selection_marks()
         self.update_table_status()
 
     def get_selected_tables(self):
         """获取选中的表"""
         if self.use_custom_tk:
+            # 获取列表框选中的项目
             selection = self.table_listbox.curselection()
             selected_tables = []
-            for i in selection:
-                # 从显示文本中提取表名
-                display_text = self.table_listbox.get(i)
-                table_name = display_text.split(' (')[0]  # 提取表名部分
+            for index in selection:
+                table_name = self.table_listbox.get(index)
                 selected_tables.append(table_name)
             return selected_tables
         else:
-            # 使用内部状态管理的选择
+            # 使用独立维护的选择状态
             return list(self.selected_table_names)
 
     def select_all_tables(self):
@@ -706,27 +703,22 @@ class MigratorGUI:
         if self.use_custom_tk:
             self.table_listbox.select_set(0, tk.END)
         else:
-            # 清空现有选择状态
+            # 选择所有显示的表
             self.selected_table_names.clear()
-            self.table_tree.selection_remove(self.table_tree.get_children())
-            
-            # 选择所有当前显示的表
             for item in self.table_tree.get_children():
                 table_name = self.table_tree.item(item)['values'][0]
                 self.selected_table_names.add(table_name)
-                self.table_tree.selection_add(item)
             
             self.update_selection_marks()
             self.update_table_status()
 
     def deselect_all_tables(self):
-        """全不选表"""
+        """取消全选表"""
         if self.use_custom_tk:
             self.table_listbox.selection_clear(0, tk.END)
         else:
-            # 清空所有选择状态
+            # 清空所有选择
             self.selected_table_names.clear()
-            self.table_tree.selection_remove(self.table_tree.get_children())
             self.update_selection_marks()
             self.update_table_status()
 
@@ -736,12 +728,13 @@ class MigratorGUI:
             return
         
         total_tables = len(self.all_tables_data)
-        selected_count = len(self.selected_table_names)
+        selected_tables = self.get_selected_tables()
+        selected_count = len(selected_tables)
         
         # 计算选中表的总行数
         total_rows = 0
         for table_info in self.all_tables_data:
-            if table_info['name'] in self.selected_table_names:
+            if table_info['name'] in selected_tables:
                 total_rows += table_info['rows']
         
         status_text = f"📋 表: {total_tables} | 选中: {selected_count} | 选中表行数: {total_rows:,}"
@@ -806,19 +799,18 @@ class MigratorGUI:
         def apply_pattern():
             pattern = pattern_var.get()
             if pattern:
-                import fnmatch
                 # 先清空选择
                 self.deselect_all_tables()
                 
                 # 选择匹配的表
-                if not self.use_custom_tk:
-                    for table_info in self.all_tables_data:
-                        if fnmatch.fnmatch(table_info['name'], pattern):
-                            self.selected_table_names.add(table_info['name'])
-                    
-                    # 重新填充列表以显示更新的选择状态
-                    self.filter_tables()
+                import fnmatch
+                for table_info in self.all_tables_data:
+                    if fnmatch.fnmatch(table_info['name'], pattern):
+                        self.selected_table_names.add(table_info['name'])
                 
+                # 重新填充列表以显示更新的选择状态
+                self.update_selection_marks()
+                self.update_table_status()
                 dialog.destroy()
         
         ttk.Button(button_frame, text="应用", command=apply_pattern).pack(side="right", padx=(5, 0))
@@ -1191,19 +1183,36 @@ class MigratorGUI:
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
     
-    def on_table_selection_change(self, event=None):
-        """表选择变化时的回调"""
-        if not self.use_custom_tk:
-            # 同步选择状态到内部集合
-            selected_tables = set()
-            for item_id in self.table_tree.selection():
-                table_name = self.table_tree.item(item_id)['values'][0]
-                selected_tables.add(table_name)
-            self.selected_table_names = selected_tables
-            
-            self.update_table_status()
-            # 更新选择标记
-            self.update_selection_marks()
+    def on_table_click(self, event):
+        """表点击事件处理 - 实现checkbox式选择"""
+        if self.use_custom_tk:
+            return
+        
+        # 获取点击的项目
+        item = self.table_tree.identify_row(event.y)
+        if not item:
+            return
+        
+        # 获取表名
+        values = self.table_tree.item(item)['values']
+        if not values:
+            return
+        table_name = values[0]
+        
+        # 切换选择状态
+        if table_name in self.selected_table_names:
+            # 取消选择
+            self.selected_table_names.discard(table_name)
+        else:
+            # 添加选择
+            self.selected_table_names.add(table_name)
+        
+        # 更新显示
+        self.update_selection_marks()
+        self.update_table_status()
+        
+        # 阻止默认的Treeview选择行为
+        return "break"
 
     def update_selection_marks(self):
         """更新表列表中的选择标记"""
@@ -1215,33 +1224,6 @@ class MigratorGUI:
             table_name = self.table_tree.item(item)['values'][0]
             check_mark = '☑' if table_name in self.selected_table_names else '☐'
             self.table_tree.item(item, text=check_mark)
-
-    def on_table_click(self, event):
-        """表点击时的回调"""
-        if self.use_custom_tk:
-            return
-        
-        # 获取点击的项目
-        item = self.table_tree.identify_row(event.y)
-        if not item:
-            return
-        
-        # 获取表名
-        table_name = self.table_tree.item(item)['values'][0]
-        
-        # 切换选择状态
-        if table_name in self.selected_table_names:
-            # 取消选择
-            self.selected_table_names.discard(table_name)
-            self.table_tree.selection_remove(item)
-        else:
-            # 添加选择
-            self.selected_table_names.add(table_name)
-            self.table_tree.selection_add(item)
-        
-        # 更新显示
-        self.update_selection_marks()
-        self.update_table_status()
 
     def run(self):
         """运行GUI"""
