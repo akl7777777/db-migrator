@@ -357,35 +357,36 @@ class MySQLToPostgreSQLMigrator:
             if not self.pg_connector.connection:
                 return False
             
-            # 按索引名分组
-            index_dict = {}
-            for idx in indexes:
-                key_name = idx['Key_name']
-                if key_name == 'PRIMARY':
-                    continue  # 主键已经在创建表时处理
-                
-                if key_name not in index_dict:
-                    index_dict[key_name] = {
-                        'unique': idx['Non_unique'] == 0,
-                        'columns': []
-                    }
-                index_dict[key_name]['columns'].append(f'"{idx["Column_name"]}"')
-            
             # 创建索引
             with self.pg_connector.connection.cursor() as cursor:
-                for idx_name, idx_info in index_dict.items():
+                for idx in indexes:
                     try:
-                        unique = 'UNIQUE' if idx_info['unique'] else ''
-                        columns = ', '.join(idx_info['columns'])
+                        idx_name = idx['name']
+                        
+                        # 跳过主键索引
+                        if idx['is_primary']:
+                            continue
+                        
+                        # 构建列列表
+                        columns = []
+                        for col in idx['columns']:
+                            columns.append(f'"{col["name"]}"')
+                        
+                        if not columns:
+                            continue
+                        
+                        unique = 'UNIQUE' if idx['is_unique'] else ''
+                        columns_str = ', '.join(columns)
                         
                         create_idx_sql = f'''
                         CREATE {unique} INDEX IF NOT EXISTS "{idx_name}_{table_name}_idx"
-                        ON "{table_name}" ({columns});
+                        ON "{table_name}" ({columns_str});
                         '''
                         
                         cursor.execute(create_idx_sql)
                         self.pg_connector.connection.commit()
                         self._report_progress(f"  ✓ 创建索引: {idx_name}")
+                        
                     except Exception as e:
                         self.pg_connector.connection.rollback()
                         logging.error(f"创建索引 {idx_name} 失败: {e}")
