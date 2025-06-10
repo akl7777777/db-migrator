@@ -16,19 +16,27 @@ from ..core.type_mapper import TypeMapper
 class MySQLToPostgreSQLMigrator:
     """MySQL到PostgreSQL数据库迁移器"""
     
-    def __init__(self, mysql_config: Dict[str, Any], pg_config: Dict[str, Any]):
+    def __init__(self, mysql_config: Dict[str, Any], pg_config: Dict[str, Any], 
+                 auto_convert_tinyint_to_bool: bool = True):
         """
         初始化迁移器
         
         Args:
             mysql_config: MySQL数据库配置
             pg_config: PostgreSQL数据库配置
+            auto_convert_tinyint_to_bool: 是否自动将没有长度的tinyint转换为bool类型
+                                        默认为True。MySQL中tinyint经常用于表示布尔值（0/1），
+                                        设置为True时会将没有长度的tinyint转换为PostgreSQL的BOOLEAN类型，
+                                        设置为False时将转换为SMALLINT类型
         """
         self.mysql_config = mysql_config
         self.pg_config = pg_config
         self.mysql_connector = MySQLConnector(mysql_config)
         self.pg_connector = PostgreSQLConnector(pg_config)
         self.type_mapper = TypeMapper()
+        
+        # 配置选项
+        self.auto_convert_tinyint_to_bool = auto_convert_tinyint_to_bool
         
         # 进度回调函数
         self.progress_callback: Optional[Callable[[str, int, int], None]] = None
@@ -111,6 +119,14 @@ class MySQLToPostgreSQLMigrator:
             
         Returns:
             str: PostgreSQL数据类型
+            
+        Note:
+            关于 tinyint 类型转换规则：
+            1. tinyint(1) 始终转换为 BOOLEAN 类型（MySQL中常用于布尔值）
+            2. 没有长度的 tinyint：
+               - 如果 auto_convert_tinyint_to_bool=True（默认），转换为 BOOLEAN 类型
+               - 如果 auto_convert_tinyint_to_bool=False，转换为 SMALLINT 类型
+            3. 其他带长度的 tinyint（如tinyint(2)）转换为 SMALLINT 类型
         """
         # 提取基本类型
         base_type = mysql_type.lower().split('(')[0]
@@ -126,6 +142,9 @@ class MySQLToPostgreSQLMigrator:
         if base_type == 'tinyint':
             # tinyint(1) 通常用作布尔值
             if length == '1':
+                return 'BOOLEAN'
+            elif length is None and self.auto_convert_tinyint_to_bool:
+                # 没有长度的tinyint，根据配置选择是否转换为布尔值
                 return 'BOOLEAN'
             else:
                 # 其他 tinyint 作为小整数
@@ -439,6 +458,38 @@ class MySQLToPostgreSQLMigrator:
             self._report_progress(f"  ✗ 创建索引失败: {table_name} - {e}")
             return False
     
+    def get_config_info(self) -> Dict[str, Any]:
+        """
+        获取当前配置信息
+        
+        Returns:
+            Dict[str, Any]: 配置信息
+        """
+        config_info = {
+            'mysql_host': self.mysql_config.get('host', 'Unknown'),
+            'mysql_database': self.mysql_config.get('database', 'Unknown'),
+            'postgresql_host': self.pg_config.get('host', 'Unknown'),
+            'postgresql_database': self.pg_config.get('database', 'Unknown'),
+            'auto_convert_tinyint_to_bool': self.auto_convert_tinyint_to_bool,
+            'tinyint_conversion_note': (
+                '没有长度的tinyint将转换为BOOLEAN类型' 
+                if self.auto_convert_tinyint_to_bool 
+                else '没有长度的tinyint将转换为SMALLINT类型'
+            )
+        }
+        return config_info
+    
+    def print_config_info(self):
+        """打印当前配置信息"""
+        config = self.get_config_info()
+        print("=" * 50)
+        print("迁移器配置信息:")
+        print(f"源数据库 (MySQL): {config['mysql_host']}/{config['mysql_database']}")
+        print(f"目标数据库 (PostgreSQL): {config['postgresql_host']}/{config['postgresql_database']}")
+        print(f"TINYINT转换设置: {config['tinyint_conversion_note']}")
+        print("说明: tinyint(1)始终转换为BOOLEAN，此设置仅影响没有长度的tinyint字段")
+        print("=" * 50)
+    
     def migrate(
         self, 
         tables: Optional[List[str]] = None,
@@ -606,7 +657,12 @@ if __name__ == "__main__":
     )
     
     # 执行迁移
-    migrator = MySQLToPostgreSQLMigrator(mysql_config, pg_config)
+    # 默认情况下，没有长度的tinyint字段会自动转换为BOOLEAN类型
+    # 如果不想自动转换，可以设置 auto_convert_tinyint_to_bool=False
+    migrator = MySQLToPostgreSQLMigrator(mysql_config, pg_config, auto_convert_tinyint_to_bool=True)
+    
+    # 显示配置信息
+    migrator.print_config_info()
     
     # 测试连接
     connections = migrator.test_connections()

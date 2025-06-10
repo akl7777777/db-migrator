@@ -40,8 +40,8 @@ class MigratorGUI:
             self.use_custom_tk = False
         
         self.root.title("数据库迁移工具 - Database Migrator")
-        self.root.geometry("900x700")
-        self.root.minsize(800, 600)
+        self.root.geometry("900x800")
+        self.root.minsize(800, 700)
         
         # 配置网格权重
         self.root.grid_rowconfigure(0, weight=1)
@@ -288,23 +288,84 @@ class MigratorGUI:
             options_frame = ctk.CTkFrame(migration_frame)
             options_frame.pack(fill="x", padx=10, pady=10)
             
-            ctk.CTkLabel(options_frame, text="批处理大小:").pack(side="left", padx=(10, 5))
+            # 第一行：批处理大小
+            batch_frame = ctk.CTkFrame(options_frame)
+            batch_frame.pack(fill="x", padx=10, pady=(10, 5))
+            
+            ctk.CTkLabel(batch_frame, text="批处理大小:").pack(side="left", padx=(10, 5))
             self.batch_size_var = tk.StringVar(value="1000")
-            batch_entry = ctk.CTkEntry(options_frame, textvariable=self.batch_size_var, width=80)
+            batch_entry = ctk.CTkEntry(batch_frame, textvariable=self.batch_size_var, width=80)
             batch_entry.pack(side="left", padx=5)
+            
+            # 第二行：复选框选项
+            options_row2 = ctk.CTkFrame(options_frame)
+            options_row2.pack(fill="x", padx=10, pady=5)
+            
+            self.include_indexes_var = tk.BooleanVar(value=True)
+            include_check = ctk.CTkCheckBox(options_row2, text="包含索引", variable=self.include_indexes_var)
+            include_check.pack(side="left", padx=(10, 20))
+            
+            self.drop_existing_var = tk.BooleanVar()
+            drop_check = ctk.CTkCheckBox(options_row2, text="删除现有表", variable=self.drop_existing_var)
+            drop_check.pack(side="left", padx=5)
+            
+            # 第三行：TINYINT转换选项
+            tinyint_row = ctk.CTkFrame(options_frame)
+            tinyint_row.pack(fill="x", padx=10, pady=(5, 10))
+            
+            self.auto_convert_tinyint_var = tk.BooleanVar(value=True)
+            tinyint_check = ctk.CTkCheckBox(
+                tinyint_row, 
+                text="自动转换TINYINT为BOOLEAN", 
+                variable=self.auto_convert_tinyint_var
+            )
+            tinyint_check.pack(side="left", padx=(10, 5))
+            
+            # 添加说明文本（CustomTkinter版本）
+            help_text = ctk.CTkLabel(
+                tinyint_row,
+                text="(影响没有长度的TINYINT字段)",
+                font=ctk.CTkFont(size=10),
+                text_color="gray"
+            )
+            help_text.pack(side="left", padx=(5, 0))
         else:
             options_frame = ttk.LabelFrame(migration_frame, text="迁移选项", padding=10)
             options_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
             
-            ttk.Label(options_frame, text="批处理大小:").pack(side="left")
+            # 第一行：批处理大小
+            batch_frame = ttk.Frame(options_frame)
+            batch_frame.pack(fill="x", pady=(0, 5))
+            ttk.Label(batch_frame, text="批处理大小:").pack(side="left")
             self.batch_size_var = tk.StringVar(value="1000")
-            ttk.Entry(options_frame, textvariable=self.batch_size_var, width=10).pack(side="left", padx=(5, 10))
+            ttk.Entry(batch_frame, textvariable=self.batch_size_var, width=10).pack(side="left", padx=(5, 10))
             
+            # 第二行：复选框选项
             self.include_indexes_var = tk.BooleanVar(value=True)
             ttk.Checkbutton(options_frame, text="包含索引", variable=self.include_indexes_var).pack(anchor="w", pady=2)
             
             self.drop_existing_var = tk.BooleanVar()
             ttk.Checkbutton(options_frame, text="删除现有表", variable=self.drop_existing_var).pack(anchor="w", pady=2)
+            
+            # 添加tinyint转换选项（默认勾选）
+            self.auto_convert_tinyint_var = tk.BooleanVar(value=True)
+            tinyint_frame = ttk.Frame(options_frame)
+            tinyint_frame.pack(fill="x", pady=2)
+            
+            ttk.Checkbutton(
+                tinyint_frame, 
+                text="自动转换没有长度的TINYINT为BOOLEAN类型", 
+                variable=self.auto_convert_tinyint_var
+            ).pack(anchor="w")
+            
+            # 添加说明标签
+            help_label = ttk.Label(
+                tinyint_frame, 
+                text="说明: TINYINT(1)始终转换为BOOLEAN，此选项影响没有长度的TINYINT字段", 
+                font=("Arial", 8),
+                foreground="gray"
+            )
+            help_label.pack(anchor="w", padx=(20, 0))
         
         # 改进的表选择框架
         if self.use_custom_tk:
@@ -525,12 +586,23 @@ class MigratorGUI:
             mysql_config = self.get_mysql_config()
             pg_config = self.get_pg_config()
             
-            migrator = MySQLToPostgreSQLMigrator(mysql_config, pg_config)
+            migrator = MySQLToPostgreSQLMigrator(
+                mysql_config, 
+                pg_config, 
+                auto_convert_tinyint_to_bool=self.auto_convert_tinyint_var.get()
+            )
             results = migrator.test_connections()
+            
+            # 获取配置信息
+            config_info = migrator.get_config_info()
             
             message = "连接测试结果:\n"
             message += f"MySQL: {'✓ 成功' if results['mysql'] else '✗ 失败'}\n"
-            message += f"PostgreSQL: {'✓ 成功' if results['postgresql'] else '✗ 失败'}"
+            message += f"PostgreSQL: {'✓ 成功' if results['postgresql'] else '✗ 失败'}\n\n"
+            message += "当前配置:\n"
+            message += f"批处理大小: {self.batch_size_var.get()}\n"
+            message += f"包含索引: {'是' if self.include_indexes_var.get() else '否'}\n"
+            message += f"TINYINT转换: {config_info['tinyint_conversion_note']}"
             
             if all(results.values()):
                 messagebox.showinfo("连接测试", message)
@@ -971,7 +1043,11 @@ class MigratorGUI:
             self.log_text.configure(state=tk.DISABLED)
             
             # 创建迁移器
-            self.migrator = MySQLToPostgreSQLMigrator(mysql_config, pg_config)
+            self.migrator = MySQLToPostgreSQLMigrator(
+                mysql_config, 
+                pg_config, 
+                auto_convert_tinyint_to_bool=self.auto_convert_tinyint_var.get()
+            )
             self.migrator.set_progress_callback(self.progress_callback)
             
             # 获取批处理大小
@@ -1051,7 +1127,11 @@ class MigratorGUI:
             mysql_config = self.get_mysql_config()
             pg_config = self.get_pg_config()
             
-            migrator = MySQLToPostgreSQLMigrator(mysql_config, pg_config)
+            migrator = MySQLToPostgreSQLMigrator(
+                mysql_config, 
+                pg_config, 
+                auto_convert_tinyint_to_bool=self.auto_convert_tinyint_var.get()
+            )
             
             selected_tables = self.get_selected_tables()
             if not selected_tables:
@@ -1085,7 +1165,8 @@ class MigratorGUI:
                 'options': {
                     'batch_size': self.batch_size_var.get(),
                     'include_indexes': self.include_indexes_var.get(),
-                    'drop_existing': self.drop_existing_var.get()
+                    'drop_existing': self.drop_existing_var.get(),
+                    'auto_convert_tinyint_to_bool': self.auto_convert_tinyint_var.get()
                 }
             }
             
@@ -1134,6 +1215,8 @@ class MigratorGUI:
                         self.include_indexes_var.set(options['include_indexes'])
                     if 'drop_existing' in options:
                         self.drop_existing_var.set(options['drop_existing'])
+                    if 'auto_convert_tinyint_to_bool' in options:
+                        self.auto_convert_tinyint_var.set(options['auto_convert_tinyint_to_bool'])
                 
                 messagebox.showinfo("加载成功", f"配置已从 {filename} 加载")
             
