@@ -134,6 +134,9 @@ class MySQLToPostgreSQLMigrator:
         # 检查是否是 unsigned
         is_unsigned = 'unsigned' in mysql_type.lower()
         
+        # 移除 unsigned 等修饰符，只保留基本类型名称
+        base_type = re.sub(r'\s+(unsigned|signed|zerofill)', '', base_type).strip()
+        
         # 获取长度/精度
         length_match = re.search(r'\(([^)]+)\)', mysql_type)
         length = length_match.group(1) if length_match else None
@@ -143,8 +146,9 @@ class MySQLToPostgreSQLMigrator:
             # tinyint(1) 通常用作布尔值
             if length == '1':
                 return 'BOOLEAN'
-            elif length is None and self.auto_convert_tinyint_to_bool:
+            elif length is None and self.auto_convert_tinyint_to_bool and not is_unsigned:
                 # 没有长度的tinyint，根据配置选择是否转换为布尔值
+                # 但无符号tinyint不转换为布尔值，因为它们通常用作小整数
                 return 'BOOLEAN'
             else:
                 # 其他 tinyint 作为小整数
@@ -160,7 +164,19 @@ class MySQLToPostgreSQLMigrator:
             pg_type = f"{pg_type}({length})"
         elif base_type == 'int' and is_unsigned:
             pg_type = 'BIGINT'  # unsigned int 需要更大的类型
-            
+        elif base_type == 'bigint' and is_unsigned:
+            # unsigned bigint 在 PostgreSQL 中仍然使用 BIGINT，但需要注意数据范围
+            # MySQL的 unsigned bigint 范围是 0 到 18446744073709551615
+            # PostgreSQL的 bigint 范围是 -9223372036854775808 到 9223372036854775807
+            # 对于超出范围的值，可能需要使用 NUMERIC 类型，但这里保持 BIGINT 以保持性能
+            pg_type = 'BIGINT'
+        elif base_type == 'smallint' and is_unsigned:
+            # unsigned smallint 可以用 integer 来存储
+            pg_type = 'INTEGER'
+        elif base_type == 'mediumint' and is_unsigned:
+            # unsigned mediumint 可以用 integer 来存储
+            pg_type = 'INTEGER'
+        
         return pg_type
     
     def create_table_sql(self, table_name: str, columns: List[Dict[str, Any]]) -> str:
